@@ -1,0 +1,8 @@
+{
+  "name": "5 MokamelFitPro - AI Bodybuilding",
+  "description": "MokamelFitPro powered by Saska AI - An AI-powered bodybuilding assistant.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
