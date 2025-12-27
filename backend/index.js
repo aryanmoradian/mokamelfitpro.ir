@@ -186,3 +186,35 @@ process.on("SIGINT", async () => {
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
+
+import { GoogleGenAI } from "@google/genai";
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+});
+
+app.post("/api/ai/chat", authMiddleware, async (req, res) => {
+  const { history, message } = req.body;
+
+  if (!message) {
+    return res.status(400).json({ error: "Message required" });
+  }
+
+  try {
+    const chat = ai.chats.create({
+      model: "gemini-3-flash-preview",
+      history,
+      config: {
+        systemInstruction:
+          "You are Saska, a Persian-speaking fitness AI assistant. Be concise and scientific.",
+      },
+    });
+
+    const result = await chat.sendMessage({ message });
+
+    res.json({ answer: result.text });
+  } catch (err) {
+    console.error("AI Error:", err);
+    res.status(500).json({ error: "AI failed" });
+  }
+});
