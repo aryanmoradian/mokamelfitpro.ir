@@ -7,22 +7,50 @@ import { PrismaClient } from "@prisma/client";
 const app = express();
 const prisma = new PrismaClient();
 const port = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET;
 
-// Middleware
-app.use(cors());
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET is not defined in environment variables");
+}
+
+/* ======================
+   CORS CONFIG (IMPORTANT)
+====================== */
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://mokamelfitpro-ir-1.onrender.com",
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // allow server-to-server or curl requests
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("CORS not allowed"));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
 app.use(express.json());
 
-// ======================
-// Health Check
-// ======================
+/* ======================
+   HEALTH CHECK
+====================== */
 app.get("/", (req, res) => {
   res.send("API is running 🚀");
 });
 
-// ======================
-// USERS (TEST)
-// ======================
+/* ======================
+   USERS (TEST)
+====================== */
 app.get("/users", async (req, res) => {
   try {
     const users = await prisma.user.findMany({
@@ -35,9 +63,9 @@ app.get("/users", async (req, res) => {
   }
 });
 
-// ======================
-// AUTH - REGISTER
-// ======================
+/* ======================
+   AUTH - REGISTER
+====================== */
 app.post("/auth/register", async (req, res) => {
   const { email, password } = req.body;
 
@@ -49,10 +77,7 @@ app.post("/auth/register", async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-      },
+      data: { email, password: hashedPassword },
     });
 
     res.status(201).json({
@@ -69,9 +94,9 @@ app.post("/auth/register", async (req, res) => {
   }
 });
 
-// ======================
-// AUTH - LOGIN
-// ======================
+/* ======================
+   AUTH - LOGIN
+====================== */
 app.post("/auth/login", async (req, res) => {
   const { email, password } = req.body;
 
@@ -89,7 +114,6 @@ app.post("/auth/login", async (req, res) => {
     }
 
     const isValid = await bcrypt.compare(password, user.password);
-
     if (!isValid) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
@@ -102,10 +126,7 @@ app.post("/auth/login", async (req, res) => {
 
     res.json({
       token,
-      user: {
-        id: user.id,
-        email: user.email,
-      },
+      user: { id: user.id, email: user.email },
     });
   } catch (error) {
     console.error(error);
@@ -113,9 +134,9 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
-// ======================
-// JWT Middleware
-// ======================
+/* ======================
+   JWT MIDDLEWARE
+====================== */
 const authMiddleware = (req, res, next) => {
   const header = req.headers.authorization;
 
@@ -134,9 +155,9 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-// ======================
-// PROTECTED ROUTE
-// ======================
+/* ======================
+   PROTECTED ROUTE
+====================== */
 app.get("/me", authMiddleware, async (req, res) => {
   const user = await prisma.user.findUnique({
     where: { id: req.userId },
@@ -146,9 +167,9 @@ app.get("/me", authMiddleware, async (req, res) => {
   res.json(user);
 });
 
-// ======================
-// Graceful Shutdown (Render)
-// ======================
+/* ======================
+   GRACEFUL SHUTDOWN
+====================== */
 process.on("SIGTERM", async () => {
   await prisma.$disconnect();
   process.exit(0);
@@ -159,9 +180,9 @@ process.on("SIGINT", async () => {
   process.exit(0);
 });
 
-// ======================
-// Start Server
-// ======================
+/* ======================
+   START SERVER
+====================== */
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
