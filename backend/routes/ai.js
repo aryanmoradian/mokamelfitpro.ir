@@ -1,5 +1,5 @@
 import express from "express";
-import { authMiddleware } from "../middleware/auth.js";
+import { authMiddleware } from "../middleware/auto.js";
 import { chatWithSaska } from "../services/geminiService.js";
 
 const router = express.Router();
@@ -21,3 +21,4 @@ router.post("/ai", authMiddleware, async (req, res) => {
 });
 
 export default router;
+
