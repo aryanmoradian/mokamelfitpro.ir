@@ -1,188 +1,134 @@
-import express from "express";
-import cors from "cors";
-import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
-import { PrismaClient } from "@prisma/client";
+import React, { useState, useRef, useEffect } from "react";
+import { chatWithSaska } from "../services/geminiService";
+import { ChatMessage } from "../types";
 
-const app = express();
-const prisma = new PrismaClient();
-const port = process.env.PORT || 3000;
-
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET is not defined in environment variables");
-}
-
-/* ======================
-   CORS CONFIG (IMPORTANT)
-====================== */
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://mokamelfitpro-ir-1.onrender.com",
-];
-
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // allow server-to-server or curl requests
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      return callback(new Error("CORS not allowed"));
+const ChatAssistant: React.FC = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      role: "model",
+      text: "درود! من ساسکا هستم. سوالی در مورد نحوه دریافت مکمل یا آنالیز بدن داری؟",
     },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+  ]);
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-app.use(express.json());
+  // اسکرول خودکار
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-/* ======================
-   HEALTH CHECK
-====================== */
-app.get("/", (req, res) => {
-  res.send("API is running 🚀");
-});
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return;
 
-/* ======================
-   USERS (TEST)
-====================== */
-app.get("/users", async (req, res) => {
-  try {
-    const users = await prisma.user.findMany({
-      select: { id: true, email: true, createdAt: true },
+    const userText = input.trim();
+    setInput("");
+    setIsLoading(true);
+
+    // پیام کاربر
+    const userMsg: ChatMessage = { role: "user", text: userText };
+
+    // آپدیت پیام‌ها و گرفتن نسخه جدید
+    setMessages((prevMessages) => {
+      const updatedMessages = [...prevMessages, userMsg];
+
+      // تاریخچه صحیح برای Gemini
+      const history = updatedMessages.map((m) => ({
+        role: m.role,
+        parts: [{ text: m.text }],
+      }));
+
+      // ارسال به AI
+      chatWithSaska(history, userText)
+        .then((responseText) => {
+          setMessages((prev) => [
+            ...prev,
+            { role: "model", text: responseText },
+          ]);
+        })
+        .catch(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "model",
+              text:
+                "متاسفانه خطایی در ارتباط با سرور رخ داد. لطفاً دوباره تلاش کنید.",
+            },
+          ]);
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
+
+      return updatedMessages;
     });
-    res.json(users);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Failed to fetch users" });
-  }
-});
+  };
 
-/* ======================
-   AUTH - REGISTER
-====================== */
-app.post("/auth/register", async (req, res) => {
-  const { email, password } = req.body;
+  return (
+    <>
+      {/* Toggle Button */}
+      <button
+        onClick={() => setIsOpen((prev) => !prev)}
+        className="fixed bottom-24 left-4 md:bottom-6 md:left-6 w-14 h-14 bg-white border-2 border-teal-500 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition z-40 text-teal-600"
+      >
+        {isOpen ? "✕" : "💬"}
+      </button>
 
-  if (!email || !password) {
-    return res.status(400).json({ error: "Email and password required" });
-  }
+      {/* Chat Window */}
+      {isOpen && (
+        <div className="fixed bottom-24 left-4 md:left-6 w-[calc(100%-2rem)] md:w-96 h-[500px] bg-white border rounded-2xl shadow-2xl z-40 flex flex-col">
+          <div className="p-4 border-b font-bold text-slate-800">
+            پشتیبانی آنلاین ساسکا
+          </div>
 
-  try {
-    const hashedPassword = await bcrypt.hash(password, 10);
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {messages.map((msg, idx) => (
+              <div
+                key={idx}
+                className={`flex ${
+                  msg.role === "user" ? "justify-start" : "justify-end"
+                }`}
+              >
+                <div
+                  className={`max-w-[80%] p-3 rounded-xl text-sm ${
+                    msg.role === "user"
+                      ? "bg-slate-100 text-slate-800"
+                      : "bg-teal-500 text-white"
+                  }`}
+                >
+                  {msg.text}
+                </div>
+              </div>
+            ))}
 
-    const user = await prisma.user.create({
-      data: { email, password: hashedPassword },
-    });
+            {isLoading && (
+              <div className="text-sm text-slate-400">در حال پاسخ...</div>
+            )}
 
-    res.status(201).json({
-      id: user.id,
-      email: user.email,
-    });
-  } catch (error) {
-    if (error.code === "P2002") {
-      return res.status(409).json({ error: "Email already exists" });
-    }
+            <div ref={messagesEndRef} />
+          </div>
 
-    console.error(error);
-    res.status(500).json({ error: "Register failed" });
-  }
-});
-
-/* ======================
-   AUTH - LOGIN
-====================== */
-app.post("/auth/login", async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ error: "Email and password required" });
-  }
-
-  try {
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (!user) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    const isValid = await bcrypt.compare(password, user.password);
-    if (!isValid) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    const token = jwt.sign(
-      { userId: user.id },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    res.json({
-      token,
-      user: { id: user.id, email: user.email },
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Login failed" });
-  }
-});
-
-/* ======================
-   JWT MIDDLEWARE
-====================== */
-const authMiddleware = (req, res, next) => {
-  const header = req.headers.authorization;
-
-  if (!header || !header.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  const token = header.split(" ")[1];
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.userId = decoded.userId;
-    next();
-  } catch {
-    res.status(401).json({ error: "Invalid token" });
-  }
+          <div className="p-3 border-t flex gap-2">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSend()}
+              placeholder="سوال خود را بنویسید..."
+              className="flex-1 border rounded px-3 py-2 text-sm"
+            />
+            <button
+              onClick={handleSend}
+              disabled={isLoading}
+              className="bg-teal-600 text-white px-4 rounded disabled:opacity-50"
+            >
+              ارسال
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
 };
 
-/* ======================
-   PROTECTED ROUTE
-====================== */
-app.get("/me", authMiddleware, async (req, res) => {
-  const user = await prisma.user.findUnique({
-    where: { id: req.userId },
-    select: { id: true, email: true, createdAt: true },
-  });
-
-  res.json(user);
-});
-
-/* ======================
-   GRACEFUL SHUTDOWN
-====================== */
-process.on("SIGTERM", async () => {
-  await prisma.$disconnect();
-  process.exit(0);
-});
-
-process.on("SIGINT", async () => {
-  await prisma.$disconnect();
-  process.exit(0);
-});
-
-/* ======================
-   START SERVER
-====================== */
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-});
+export default ChatAssistant;
