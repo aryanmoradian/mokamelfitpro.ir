@@ -1,5 +1,5 @@
 import express from "express";
-import { authMiddleware } from "../middleware/auto.js";
+import { authMiddleware } from "../middleware/auth.js";
 import { chatWithSaska } from "../services/geminiService.js";
 
 const router = express.Router();

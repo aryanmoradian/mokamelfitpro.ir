@@ -1,9 +1,8 @@
 import express from "express";
 import cors from "cors";
 import { PrismaClient } from "@prisma/client";
-import { authMiddleware } from "./middleware/auto.js";
+import { authMiddleware } from "./middleware/auth.js";
 import aiRouter from "./routes/ai.js";
-import { GoogleGenAI } from "@google/genai";
 
 const app = express();
 const prisma = new PrismaClient();
